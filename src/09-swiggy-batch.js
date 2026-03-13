@@ -88,25 +88,90 @@
  *   //     { status: "rejected", reason: "Item name required!" }]
  */
 export function prepareOrder(item, prepTime) {
-  // Your code here
+  return new Promise((resolve, reject) => {
+    if (!item) {
+      reject(new Error("Item name required!"));
+      return;
+    }
+
+    if (typeof prepTime !== "number" || prepTime <= 0) {
+      reject(new Error("Invalid prep time!"));
+      return;
+    }
+
+    setTimeout(() => {
+      resolve({ item, ready: true, prepTime });
+    }, prepTime);
+  });
 }
 
 export function prepareBatch(items) {
-  // Your code here
+  if (items.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return Promise.all(items.map((item) => prepareOrder(item.name, item.prepTime)));
 }
 
 export function getFirstReady(items) {
-  // Your code here
+  if (items.length === 0) {
+    return Promise.reject(new Error("No items to prepare!"));
+  }
+
+  return Promise.race(items.map((item) => prepareOrder(item.name, item.prepTime)));
 }
 
 export function prepareSafeBatch(items) {
-  // Your code here
+  if (items.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return Promise.allSettled(items.map((item) => prepareOrder(item.name, item.prepTime))).then((results) =>
+    results.map((result) =>
+      result.status === "fulfilled"
+        ? result
+        : { status: "rejected", reason: result.reason.message }
+    )
+  );
 }
 
 export function deliverWithTimeout(orderPromise, timeoutMs) {
-  // Your code here
+  if (typeof timeoutMs !== "number" || timeoutMs <= 0) {
+    return Promise.reject(new Error("Invalid timeout!"));
+  }
+
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Delivery timeout!")), timeoutMs);
+  });
+
+  return Promise.race([orderPromise, timeoutPromise]).then(
+    (result) => {
+      clearTimeout(timeoutId);
+      return result;
+    },
+    (error) => {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  );
 }
 
 export function batchWithRetry(items, maxRetries) {
-  // Your code here
+  if (typeof maxRetries !== "number" || maxRetries < 0) {
+    return Promise.reject(new Error("Invalid retry count!"));
+  }
+
+  let attempt = 0;
+  const tryBatch = () =>
+    prepareBatch(items).catch((error) => {
+      if (attempt >= maxRetries) {
+        throw error;
+      }
+
+      attempt += 1;
+      return tryBatch();
+    });
+
+  return tryBatch();
 }
